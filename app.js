@@ -823,6 +823,7 @@
             
             this.highlightedAnchor = null;
             this.hoveredShape = null;
+            this.dragStartShapes = [];
             
             this.init();
         }
@@ -1116,7 +1117,8 @@
                     this.selection.toggleShape(shape);
                     if (this.selection.containsShape(shape)) {
                         this.isDragging = true;
-                        this.dragOffset = pos.subtract(new Point(shape.bounds.x, shape.bounds.y));
+                        this.dragStartPos = pos.clone();
+                        this.saveDragStartPositions();
                     }
                 } else if (conn) {
                     this.selection.setConnection(conn);
@@ -1131,7 +1133,8 @@
                         this.selection.setShapes([shape]);
                     }
                     this.isDragging = true;
-                    this.dragOffset = pos.subtract(new Point(shape.bounds.x, shape.bounds.y));
+                    this.dragStartPos = pos.clone();
+                    this.saveDragStartPositions();
                 } else if (conn) {
                     this.selection.setConnection(conn);
                 } else {
@@ -1144,6 +1147,17 @@
             
             this.updatePropertyPanel();
             this.render();
+        }
+
+        saveDragStartPositions() {
+            this.dragStartShapes = [];
+            for (const shape of this.selection.shapes) {
+                this.dragStartShapes.push({
+                    shape: shape,
+                    startX: shape.bounds.x,
+                    startY: shape.bounds.y
+                });
+            }
         }
 
         handleConnectMouseDown(pos) {
@@ -1236,28 +1250,74 @@
         }
 
         handleDrag(pos) {
-            if (!this.selection.hasShapes) return;
+            if (!this.selection.hasShapes || this.dragStartShapes.length === 0) return;
             
-            const dx = pos.x - this.dragStartPos.x;
-            const dy = pos.y - this.dragStartPos.y;
+            const totalDx = pos.x - this.dragStartPos.x;
+            const totalDy = pos.y - this.dragStartPos.y;
             
-            let snapDx = dx;
-            let snapDy = dy;
+            let finalDx = totalDx;
+            let finalDy = totalDy;
             
-            if (this.selection.hasSingleShape) {
-                const snapInfo = this.getSnapInfo(this.selection.singleShape, dx, dy);
-                if (snapInfo.snapX !== null) snapDx = snapInfo.snapX;
-                if (snapInfo.snapY !== null) snapDy = snapInfo.snapY;
+            if (this.selection.hasSingleShape && this.dragStartShapes.length > 0) {
+                const snapInfo = this.calculateSnap(this.dragStartShapes[0], totalDx, totalDy);
+                if (snapInfo.snapX !== null) finalDx = snapInfo.snapX;
+                if (snapInfo.snapY !== null) finalDy = snapInfo.snapY;
             }
             
-            for (const shape of this.selection.shapes) {
-                shape.move(snapDx - (this.dragStartPos.x - this.dragStartPos.x + snapDx - dx), 
-                          snapDy - (this.dragStartPos.y - this.dragStartPos.y + snapDy - dy));
+            for (const item of this.dragStartShapes) {
+                item.shape.setPosition(item.startX + finalDx, item.startY + finalDy);
             }
             
-            this.dragStartPos = pos.clone();
             this.updatePropertyPanel();
             this.render();
+        }
+
+        calculateSnap(startItem, totalDx, totalDy) {
+            const result = { snapX: null, snapY: null };
+            const startX = startItem.startX;
+            const startY = startItem.startY;
+            const shape = startItem.shape;
+            const w = shape.bounds.width;
+            const h = shape.bounds.height;
+            
+            const targetLeft = startX + totalDx;
+            const targetRight = targetLeft + w;
+            const targetCenterX = targetLeft + w / 2;
+            const targetTop = startY + totalDy;
+            const targetBottom = targetTop + h;
+            const targetCenterY = targetTop + h / 2;
+            
+            for (const other of this.shapes) {
+                if (other === shape || this.selection.containsShape(other)) continue;
+                
+                const fixed = other.bounds;
+                
+                if (Math.abs(targetLeft - fixed.left) < SNAP_DISTANCE) {
+                    result.snapX = fixed.left - startX;
+                } else if (Math.abs(targetRight - fixed.right) < SNAP_DISTANCE) {
+                    result.snapX = fixed.right - startX - w;
+                } else if (Math.abs(targetCenterX - fixed.centerX) < SNAP_DISTANCE) {
+                    result.snapX = fixed.centerX - startX - w / 2;
+                } else if (Math.abs(targetRight - fixed.left) < SNAP_DISTANCE) {
+                    result.snapX = fixed.left - startX - w;
+                } else if (Math.abs(targetLeft - fixed.right) < SNAP_DISTANCE) {
+                    result.snapX = fixed.right - startX;
+                }
+                
+                if (Math.abs(targetTop - fixed.top) < SNAP_DISTANCE) {
+                    result.snapY = fixed.top - startY;
+                } else if (Math.abs(targetBottom - fixed.bottom) < SNAP_DISTANCE) {
+                    result.snapY = fixed.bottom - startY - h;
+                } else if (Math.abs(targetCenterY - fixed.centerY) < SNAP_DISTANCE) {
+                    result.snapY = fixed.centerY - startY - h / 2;
+                } else if (Math.abs(targetBottom - fixed.top) < SNAP_DISTANCE) {
+                    result.snapY = fixed.top - startY - h;
+                } else if (Math.abs(targetTop - fixed.bottom) < SNAP_DISTANCE) {
+                    result.snapY = fixed.bottom - startY;
+                }
+            }
+            
+            return result;
         }
 
         getSnapInfo(movingShape, dx, dy) {
@@ -1722,7 +1782,17 @@
             
             for (const shape of this.selection.shapes) {
                 shape.drawSelection(this.overlayCtx);
-                shape.drawAnchors(this.overlayCtx, this.highlightedAnchor);
+            }
+            
+            const showAllAnchors = this.currentTool === ToolType.CONNECT || this.isConnecting;
+            if (showAllAnchors) {
+                for (const shape of this.shapes) {
+                    shape.drawAnchors(this.overlayCtx, this.highlightedAnchor);
+                }
+            } else {
+                for (const shape of this.selection.shapes) {
+                    shape.drawAnchors(this.overlayCtx, this.highlightedAnchor);
+                }
             }
             
             if (this.isSelecting) {
