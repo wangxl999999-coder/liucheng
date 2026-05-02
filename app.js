@@ -299,7 +299,17 @@
                     break;
                 case ShapeType.ROUNDED_RECTANGLE:
                     const r = Math.min(10, b.width / 2, b.height / 2);
-                    ctx.roundRect(b.x, b.y, b.width, b.height, r);
+                    const x = b.x, y = b.y, w = b.width, h = b.height;
+                    ctx.moveTo(x + r, y);
+                    ctx.lineTo(x + w - r, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                    ctx.lineTo(x + w, y + h - r);
+                    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                    ctx.lineTo(x + r, y + h);
+                    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                    ctx.lineTo(x, y + r);
+                    ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.closePath();
                     break;
                 case ShapeType.DIAMOND:
                     ctx.moveTo(b.centerX, b.top);
@@ -993,10 +1003,21 @@
                 item.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('shapeType', item.dataset.shape);
                 });
+                
+                item.addEventListener('click', (e) => {
+                    const shapeType = item.dataset.shape;
+                    const canvasRect = this.overlayCanvas.getBoundingClientRect();
+                    const centerX = 200;
+                    const centerY = 150;
+                    this.createShape(shapeType, centerX, centerY, 100, 60);
+                });
+                
+                item.style.cursor = 'pointer';
             });
             
             this.overlayCanvas.addEventListener('dragover', (e) => {
                 e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
             });
             
             this.overlayCanvas.addEventListener('drop', (e) => {
@@ -1635,7 +1656,17 @@
                         break;
                     case 'rounded-rectangle':
                         const r = Math.min(8, (w - margin * 2) / 2, (h - margin * 2) / 2);
-                        ctx.roundRect(margin, margin, w - margin * 2, h - margin * 2, r);
+                        const rx = margin, ry = margin, rw = w - margin * 2, rh = h - margin * 2;
+                        ctx.moveTo(rx + r, ry);
+                        ctx.lineTo(rx + rw - r, ry);
+                        ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+                        ctx.lineTo(rx + rw, ry + rh - r);
+                        ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+                        ctx.lineTo(rx + r, ry + rh);
+                        ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+                        ctx.lineTo(rx, ry + r);
+                        ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+                        ctx.closePath();
                         break;
                     case 'diamond':
                         ctx.moveTo(w / 2, margin);
